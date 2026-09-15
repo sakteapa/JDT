@@ -12,7 +12,11 @@ import {
   RefreshCw,
   CheckCircle2,
   HardDrive,
-  Usb
+  Usb,
+  Download,
+  FolderArchive,
+  Terminal,
+  X
 } from 'lucide-react';
 import { J2534Device, J2534DeviceInfo, CanBusType, DiagnosticProtocol } from '../types';
 import { TransportType, transportManager } from '../services/transportManager';
@@ -71,6 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [availableDevices, setAvailableDevices] = useState<J2534DeviceInfo[]>(transportManager.getAvailableDevices());
   const [isScanning, setIsScanning] = useState<boolean>(transportManager.getState().isScanningRegistry);
   const [isProbing, setIsProbing] = useState<boolean>(false);
+  const [showInstallerModal, setShowInstallerModal] = useState<boolean>(false);
 
   useEffect(() => {
     const unsub = transportManager.subscribeState((st) => {
@@ -206,6 +211,15 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Tools & Info buttons */}
+          <button
+            onClick={() => setShowInstallerModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-gradient-to-r from-cyan-900/80 to-blue-900/80 hover:from-cyan-800 hover:to-blue-800 border border-cyan-500/50 text-cyan-200 font-medium cursor-pointer shadow-sm"
+            title="Download / Build Windows .exe Installer"
+          >
+            <Download className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Installer (.exe)</span>
+          </button>
+
           <button
             onClick={onOpenHex2Dec}
             className="flex items-center gap-1 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 cursor-pointer"
@@ -430,6 +444,102 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Windows Installer / Export Modal */}
+      {showInstallerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                  <Download className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Windows Installer (.exe / .msi)</h3>
+                  <p className="text-xs text-slate-400">Tauri Native Desktop Build for SAE J2534 Flasher</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInstallerModal(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-4 text-xs text-slate-300 max-h-[70vh] overflow-y-auto">
+              <div className="p-3.5 rounded-lg bg-cyan-950/40 border border-cyan-800/60 text-cyan-200">
+                <p className="font-semibold text-cyan-300 mb-1">ℹ️ Cloud Sandbox Notice (Linux)</p>
+                <p className="leading-relaxed">
+                  He development web container hi <strong>Linux</strong> a nih avangin Windows native binary (<code className="text-cyan-100 bg-cyan-900/50 px-1 py-0.5 rounded">.exe / .msi</code>) chu Windows khawl (PC) emaw GitHub Actions automated builder-ah chauh a siam theih a ni.
+                </p>
+              </div>
+
+              {/* Method 1: Automated 1-Click Windows Build */}
+              <div className="p-4 rounded-lg bg-slate-950/80 border border-slate-800 space-y-2.5">
+                <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm">
+                  <FolderArchive className="w-4 h-4 text-cyan-400" />
+                  <span>KHAWL (WINDOWS PC)-A INSTALLER SIAM DAN:</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1.5 pl-1 text-slate-300 leading-relaxed">
+                  <li>
+                    A chunga <strong>Settings (dot 3)</strong> menu-ah kal la, <strong>Export to ZIP</strong> emaw <strong>Export to GitHub</strong> hmetin project hi download rawh.
+                  </li>
+                  <li>
+                    ZIP file kha Windows PC-ah unzip la, folder chhungah khan lut rawh.
+                  </li>
+                  <li>
+                    Folder chhunga awm <code className="text-amber-300 bg-slate-900 px-1.5 py-0.5 rounded font-mono border border-slate-700">build-windows.bat</code> file kha <strong>Double-Click</strong> tawp rawh.
+                  </li>
+                  <li>
+                    Amah ngeiin NPM dependencies leh Tauri Windows <code className="text-emerald-300 font-mono">.exe</code> &amp; <code className="text-emerald-300 font-mono">.msi</code> installer a compile chhuak nghal vek ang!
+                  </li>
+                </ol>
+                <div className="mt-2 p-2.5 bg-slate-900 rounded border border-slate-800 font-mono text-[11px] text-slate-400">
+                  📁 <span className="text-slate-300">Target Output Location:</span><br />
+                  <span className="text-emerald-400">src-tauri\target\release\bundle\msi\ECU UDS J2534 Flasher_1.0.0_x64_en-US.msi</span><br />
+                  <span className="text-cyan-400">src-tauri\target\release\ECU UDS J2534 Flasher.exe</span>
+                </div>
+              </div>
+
+              {/* Method 2: Manual Terminal Commands */}
+              <div className="p-4 rounded-lg bg-slate-950/80 border border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm">
+                  <Terminal className="w-4 h-4 text-cyan-400" />
+                  <span>Terminal / Command Prompt Hmanga Build Dan:</span>
+                </div>
+                <p className="text-slate-400">Windows PowerShell emaw CMD-ah heng command hi run rawh:</p>
+                <pre className="p-3 bg-slate-900 border border-slate-800 rounded font-mono text-emerald-400 overflow-x-auto text-[11px] select-all">
+npm install
+npm run tauri build
+                </pre>
+              </div>
+
+              {/* Method 3: GitHub Actions */}
+              <div className="p-4 rounded-lg bg-slate-950/80 border border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm">
+                  <span>☁️ GitHub Actions Automated Release:</span>
+                </div>
+                <p className="text-slate-400 leading-relaxed">
+                  Project chhungah <code className="text-slate-200 font-mono">.github/workflows/build-tauri-installer.yml</code> workflow kan siam sa diam tawh a. GitHub-a i export hian GitHub server-in amahin Windows <code className="text-emerald-300 font-mono">.exe</code> leh <code className="text-emerald-300 font-mono">.msi</code> installer a compile ang a, <strong>Releases</strong> tab-ah download turin a dah chhuak nghal ang!
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 bg-slate-800/80 border-t border-slate-700 flex justify-end">
+              <button
+                onClick={() => setShowInstallerModal(false)}
+                className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition-colors cursor-pointer"
+              >
+                Ka Hrethiam e (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

@@ -39,16 +39,42 @@ pub const J2534_REGISTRY_ROOTS: &[&str] = &[
     r"SOFTWARE\WOW6432Node\PassThruSupport",
 ];
 
+#[cfg(target_os = "windows")]
+pub fn load_j2534_library(dll_path: &str) -> Result<libloading::Library, libloading::Error> {
+    unsafe {
+        // Try direct path first
+        if let Ok(lib) = libloading::Library::new(dll_path) {
+            return Ok(lib);
+        }
+
+        // Check common standard fallback locations for passthru32.dll or vendor DLLs
+        if dll_path.eq_ignore_ascii_case("passthru32.dll") || dll_path.to_lowercase().ends_with("passthru32.dll") {
+            if let Ok(lib) = libloading::Library::new(r"C:\Windows\System32\passthru32.dll") {
+                return Ok(lib);
+            }
+            if let Ok(lib) = libloading::Library::new(r"C:\Windows\SysWOW64\passthru32.dll") {
+                return Ok(lib);
+            }
+            if let Ok(lib) = libloading::Library::new(r"C:\Program Files (x86)\PassThru\passthru32.dll") {
+                return Ok(lib);
+            }
+        }
+
+        // Final attempt with original path
+        libloading::Library::new(dll_path)
+    }
+}
+
 /// Actively probes whether a J2534 hardware interface is physically plugged in via USB and responsive.
 /// Calls PassThruOpen(&DeviceID) and immediately PassThruClose(DeviceID) on the driver DLL.
 #[cfg(target_os = "windows")]
 pub fn probe_device_hardware(dll_path: &str, device_name: &str) -> (bool, String, Option<String>) {
-    use libloading::{Library, Symbol};
+    use libloading::Symbol;
     use std::ffi::CString;
 
     // Safety: Load dynamic library and call PassThruOpen / PassThruClose
     unsafe {
-        match Library::new(dll_path) {
+        match load_j2534_library(dll_path) {
             Ok(lib) => {
                 // Typedef for PassThruOpen & PassThruClose according to SAE J2534-1 standard
                 type PassThruOpenFn = unsafe extern "system" fn(*const std::ffi::c_void, *mut u32) -> i32;
@@ -102,8 +128,8 @@ pub fn probe_device_hardware(dll_path: &str, device_name: &str) -> (bool, String
 #[cfg(not(target_os = "windows"))]
 pub fn probe_device_hardware(_dll_path: &str, device_name: &str) -> (bool, String, Option<String>) {
     // Cross-platform fallback / simulation:
-    // If the device is Zenith Z5 PassThru, it reports physically plugged in and ready
-    if device_name.contains("Zenith Z5") {
+    // If the device is Zenith Z5 PassThru or Generic SAE J2534, it reports physically plugged in and ready
+    if device_name.contains("Zenith Z5") || device_name.contains("Generic SAE J2534") || device_name.to_lowercase().contains("passthru32") {
         (true, "Connected & Ready".to_string(), None)
     } else {
         (
@@ -209,6 +235,46 @@ pub fn enumerate_j2534_registry() -> Vec<J2534RegistryDevice> {
         }
     }
 
+    // Also check standard system passthru32.dll locations
+    let standard_passthru_paths = [
+        r"C:\Windows\System32\passthru32.dll",
+        r"C:\Windows\SysWOW64\passthru32.dll",
+        r"passthru32.dll",
+    ];
+
+    for candidate_path in &standard_passthru_paths {
+        if std::path::Path::new(candidate_path).exists() || *candidate_path == "passthru32.dll" {
+            let (is_conn, conn_status, probe_err) = probe_device_hardware(candidate_path, "Generic SAE J2534 (passthru32.dll)");
+            if is_conn || std::path::Path::new(candidate_path).exists() {
+                let name = "Generic SAE J2534 (passthru32.dll)".to_string();
+                let display_name = if is_conn {
+                    format!("{} (Connected & Ready)", name)
+                } else {
+                    format!("{} (Not Connected / Offline)", name)
+                };
+                detected_map.entry(name.clone()).or_insert(J2534RegistryDevice {
+                    id: "generic_sae_j2534_passthru32".to_string(),
+                    name,
+                    vendor: "SAE J2534-1 Standard Driver".to_string(),
+                    dllPath: candidate_path.to_string(),
+                    registryPath: r"HKLM\SOFTWARE\PassThruSupport.04.04\Generic J2534".to_string(),
+                    configApplication: None,
+                    isRealHardware: true,
+                    canSupported: true,
+                    iso15765Supported: true,
+                    kwpSupported: true,
+                    dualWireCan: true,
+                    status: if is_conn { "Ready".to_string() } else { "Offline".to_string() },
+                    isConnected: is_conn,
+                    connectionStatus: conn_status,
+                    displayName: display_name,
+                    probeError: probe_err,
+                });
+                break;
+            }
+        }
+    }
+
     detected_map.into_values().collect()
 }
 
@@ -217,6 +283,7 @@ pub fn enumerate_j2534_registry() -> Vec<J2534RegistryDevice> {
     // Non-Windows fallback / development simulation
     let raw_list = vec![
         ("Zenith Z5 PassThru", "EZDS Co., Ltd.", r"C:\Program Files\EZDS\Zenith Z5\z5j2534.dll", r"HKLM\SOFTWARE\PassThruSupport.04.04\Zenith Z5 PassThru", Some(r"C:\Program Files\EZDS\Zenith Z5\Z5Config.exe".to_string())),
+        ("Generic SAE J2534 (passthru32.dll)", "SAE J2534 Standards", "passthru32.dll", r"HKLM\SOFTWARE\PassThruSupport.04.04\Generic J2534", None),
         ("Tactrix Openport 2.0", "Tactrix Inc.", r"C:\Windows\System32\op20pt32.dll", r"HKLM\SOFTWARE\PassThruSupport.04.04\Tactrix Openport 2.0", None),
         ("Scanmatik 2 Pro", "Scanmatik Corp.", r"C:\Program Files (x86)\Scanmatik\sm2j2534.dll", r"HKLM\SOFTWARE\PassThruSupport.04.04\Scanmatik 2 Pro", Some(r"C:\Program Files (x86)\Scanmatik\SM2Config.exe".to_string())),
         ("Mongoose Pro", "Drew Technologies / Opus IVS", r"C:\Program Files (x86)\Drew Technologies, Inc\J2534 Shared\MongoosePro.dll", r"HKLM\SOFTWARE\PassThruSupport.04.04\MongoosePro", None),
@@ -232,7 +299,7 @@ pub fn enumerate_j2534_registry() -> Vec<J2534RegistryDevice> {
         };
 
         J2534RegistryDevice {
-            id: name.to_lowercase().replace(' ', "_"),
+            id: name.to_lowercase().replace(' ', "_").replace('(', "").replace(')', "").replace('.', "_"),
             name: name.to_string(),
             vendor: vendor.to_string(),
             dllPath: dll.to_string(),

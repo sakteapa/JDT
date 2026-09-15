@@ -221,6 +221,23 @@ export const KNOWN_J2534_DEVICES: Record<string, J2534DeviceInfo> = {
     connectionStatus: 'Connected & Ready',
     displayName: 'Zenith Z5 PassThru (Connected & Ready)'
   },
+  'Generic SAE J2534 (passthru32.dll)': {
+    id: 'generic_passthru32',
+    name: 'Generic SAE J2534 (passthru32.dll)',
+    vendor: 'SAE J2534-1 Standards',
+    dllPath: 'C:\\Windows\\System32\\passthru32.dll',
+    registryPath: 'HKLM\\SOFTWARE\\PassThruSupport.04.04\\Generic J2534',
+    isRealHardware: true,
+    canSupported: true,
+    iso15765Supported: true,
+    kwpSupported: true,
+    dualWireCan: true,
+    status: 'Ready',
+    isRegistryDetected: true,
+    isConnected: true,
+    connectionStatus: 'Connected & Ready',
+    displayName: 'Generic SAE J2534 (passthru32.dll)'
+  },
   'Virtual ECU Simulator (CAN & UDS)': {
     id: 'virtual_sim',
     name: 'Virtual ECU Simulator (CAN & UDS)',
@@ -1441,24 +1458,34 @@ export class TransportManager {
    * ==========================================================================
    */
   public async readVBat(): Promise<number> {
-    if (this.state.mode === 'tauri_j2534' && this.state.isTauriNative && this.state.channelId > 0) {
-      try {
-        const tauri = (window as unknown as { __TAURI__: { invoke: <T>(cmd: string, args?: unknown) => Promise<T> } }).__TAURI__;
-        const res = await tauri.invoke<{ voltageMv: number }>('j2534_ioctl', {
-          channelId: this.state.channelId,
-          ioctlId: J2534Ioctl.READ_VBAT
-        });
-        if (res && typeof res.voltageMv === 'number') {
-          this.state.vBat = Number((res.voltageMv / 1000).toFixed(2));
-          this.notifyState();
-          return this.state.vBat;
+    if (this.state.mode === 'tauri_j2534') {
+      if (this.state.isTauriNative && this.state.channelId > 0) {
+        try {
+          const tauri = (window as unknown as { __TAURI__: { invoke: <T>(cmd: string, args?: unknown) => Promise<T> } }).__TAURI__;
+          const res = await tauri.invoke<{ voltageMv: number }>('j2534_ioctl', {
+            channelId: this.state.channelId,
+            ioctlId: J2534Ioctl.READ_VBAT
+          });
+          if (res && typeof res.voltageMv === 'number') {
+            this.state.vBat = Number((res.voltageMv / 1000).toFixed(2));
+            this.notifyState();
+            return this.state.vBat;
+          }
+        } catch {
+          // Hardware read error
         }
-      } catch {
-        // Fallback
       }
+
+      // In real hardware mode, never simulate battery voltage
+      if (!this.state.connected) {
+        this.state.vBat = 0.0;
+        this.notifyState();
+        return 0.0;
+      }
+      return this.state.vBat || 0.0;
     }
 
-    // Realistic fluctuating 12.6V - 13.8V vehicle battery generator
+    // Realistic fluctuating 12.6V - 13.8V vehicle battery generator ONLY for Virtual mode
     const jitter = Math.sin(Date.now() / 2500) * 0.12 + Math.random() * 0.04;
     this.state.vBat = Number((12.65 + jitter).toFixed(2));
     this.notifyState();

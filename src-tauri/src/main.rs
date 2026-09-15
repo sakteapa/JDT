@@ -51,6 +51,13 @@ pub struct VbatResult {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct IoctlResult {
+    pub voltage_mv: u32,
+    pub status: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProbeDeviceResult {
     pub device_name: String,
     pub dll_path: String,
@@ -214,6 +221,16 @@ fn j2534_read_vbat(channel_id: u32) -> Result<VbatResult, String> {
     })
 }
 
+/// J2534 PassThruIoctl general handler
+#[tauri::command]
+fn j2534_ioctl(channel_id: u32, ioctl_id: u32) -> Result<IoctlResult, String> {
+    let output_val = passthru::pass_thru_ioctl(channel_id, ioctl_id)?;
+    Ok(IoctlResult {
+        voltage_mv: output_val,
+        status: 0,
+    })
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -230,7 +247,8 @@ fn main() {
             j2534_stop_msg_filter,
             j2534_start_periodic_msg,
             j2534_stop_periodic_msg,
-            j2534_read_vbat
+            j2534_read_vbat,
+            j2534_ioctl
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

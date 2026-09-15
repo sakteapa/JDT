@@ -178,9 +178,9 @@ pub fn pass_thru_open(device_name: &str, dll_path: &str) -> Result<u32, String> 
         }
         session.loaded_library = None;
 
-        // Dynamically load the vendor DLL
+        // Dynamically load the vendor DLL (with passthru32.dll fallback paths)
         let lib = unsafe {
-            Library::new(dll_path).map_err(|e| {
+            crate::registry::load_j2534_library(dll_path).map_err(|e| {
                 format!(
                     "Failed to load J2534 DLL '{}': {}. Ensure correct 32-bit/64-bit architecture matches driver.",
                     dll_path, e
@@ -561,6 +561,47 @@ pub fn pass_thru_stop_periodic_msg(channel_id: u32, msg_id: u32) -> Result<u32, 
     }
 
     Ok(0)
+}
+
+/// J2534 PassThruIoctl general handler
+pub fn pass_thru_ioctl(channel_id: u32, ioctl_id: u32) -> Result<u32, String> {
+    let session = GLOBAL_SESSION.lock().map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let lib = session
+            .loaded_library
+            .as_ref()
+            .ok_or_else(|| "No active J2534 library loaded".to_string())?;
+
+        let mut output_val: u32 = 0;
+        let ret = unsafe {
+            let ioctl_fn = lib.get::<PassThruIoctlFn>(b"PassThruIoctl\0").map_err(|e| {
+                format!("PassThruIoctl export not found: {}", e)
+            })?;
+            ioctl_fn(
+                channel_id,
+                ioctl_id,
+                std::ptr::null(),
+                &mut output_val as *mut u32 as *mut c_void,
+            )
+        };
+
+        if ret != 0 {
+            return Err(format_j2534_error(&format!("PassThruIoctl(0x{:X})", ioctl_id), ret));
+        }
+
+        Ok(output_val)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if ioctl_id == 0x07 {
+            Ok(12600)
+        } else {
+            Ok(0)
+        }
+    }
 }
 
 /// J2534 PassThruIoctl: READ_VBAT (IoctlID = 0x07)

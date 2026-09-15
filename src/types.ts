@@ -1,5 +1,6 @@
 export type J2534Device = 
   | 'Zenith Z5 PassThru'
+  | 'Generic SAE J2534 (passthru32.dll)'
   | 'Tactrix Openport 2.0'
   | 'Scanmatik 2 Pro'
   | 'Mongoose Pro'
