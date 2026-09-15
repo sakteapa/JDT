@@ -1,0 +1,25 @@
+[package]
+name = "ecu-uds-flasher"
+version = "0.1.0"
+description = "Professional SAE J2534 UDS ECU Diagnostic & Calibration Suite"
+authors = ["Diagnostic Engineer"]
+license = "MIT"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.5", features = ["shell-open"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+libloading = "0.8"
+lazy_static = "1.4"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+windows = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_System_Registry",
+    "Win32_System_LibraryLoader",
+] }
